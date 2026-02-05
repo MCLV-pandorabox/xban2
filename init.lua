@@ -51,21 +51,40 @@ end
 
 -- supports wildcard IP pattern (both IPv4 and IPv6)
 function xban.find_entry(key, create)
-	-- exact match (player or IP)
+	local candidate_e, candidate_i
+
+	-- exact match (player or IP), but do not exit on unbanned
 	for i, e in ipairs(xban.db) do
-		if e.names[key] then return e, i end
+		if e.names[key] then
+			candidate_e, candidate_i = e, i
+			if e.banned then
+				return e, i	-- exact banned match wins immediately
+			end
+			-- if not banned, remember but don't return yet
+		end
 	end
-	-- wildcard pattern match for IPs
+
+	-- wildcard prefix matches
 	if key and key:find("[.:]") then
 		for i, e in ipairs(xban.db) do
 			for name in pairs(e.names) do
-				local wildcard_prefix = name:match("(.+[.:])%*$")
+				local wildcard_prefix = name:match("(.*)%*$")
 				if wildcard_prefix and key:sub(1, #wildcard_prefix) == wildcard_prefix then
+					return e, i
+				end
+				local key_prefix = key:match("(.*)%*$")
+				if key_prefix and name:sub(1, #key_prefix) == key_prefix then
 					return e, i
 				end
 			end
 		end
 	end
+
+	-- fall back to last exact unbanned match (for metadata, history, etc.)
+	if candidate_e then
+		return candidate_e, candidate_i
+	end
+
 	if create then
 		local e = {
 			names = { [key]=true },
